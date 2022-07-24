@@ -1,0 +1,55 @@
+---
+title: "EDA"
+author: "Taylor Bonar & Satvik Ajmera"
+date: "2022-07-24"
+output: powerpoint_presentation
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+
+```{r}
+library(tswge)
+library(arrow)
+
+btc = read_parquet("data/bitcoin_01-2018.parquet")
+head(btc)
+```
+
+```{r}
+summary(btc)
+```
+```{r}
+plot(btc$timestamp, btc$Target, type="l",
+     main="Bitcoin Residualized Returns in January 2018",
+     xlab="Date",
+     ylab="15 Minute Residualized Returns")
+```
+***Stationarity Check:**
+  * Mean - appears dependent on time
+  * Variance - appears to not be constant
+  * Correlations - follow similar patterns, however anomalies can be observed.
+
+```{r}
+plotts.sample.wge(btc$Target)
+
+end.idx = length(btc$Target)
+mid.idx = end.idx/2
+midplusone.idx = mid.idx + 1
+
+acf(btc$Target[1:mid.idx],plot=T, ylim=c(-1,1))
+acf(btc$Target[midplusone.idx:end.idx],plot=T, ylim=c(-1,1))
+```
+
+We have 7 peaks of frequency, with the highest near 0. Let's try filtering out some of the dataset to focus on particular behaviors of interest
+```{r}
+ma = filter(btc$Target, rep(1,5)/5)
+plot(ma, type="l")
+```
+
+```{r}
+ma = filter(btc$Target, rep(1,60)/60)
+plot(ma, type="l")
+```
