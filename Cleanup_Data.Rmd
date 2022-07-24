@@ -17,46 +17,55 @@ library(arrow)
 assets_df = read.csv("data/asset_details.csv")
 head(assets_df)
 
-df = read_parquet("data/train.parquet.gzip")
+df = read_parquet("data/train_test.parquet")
 head(df)
 ```
 
 Extract the bitcoin dataset
 ```{r}
-bitcoin_df = df[df$Asset_ID == 1,]
-head(bitcoin_df)
+btc_df = df[df$Asset_ID == 1,]
+head(btc_df)
 ```
 
 Rename timestamp to properly be unix_time/epoch time
 ```{r}
-names(bitcoin_df)[names(bitcoin_df) == "timestamp"] <- 'unix_time'
-head(bitcoin_df)
+names(btc_df)[names(btc_df) == "timestamp"] <- 'unix_time'
+head(btc_df)
 ```
 
 Create some timestamps for references
 ```{r}
 library(lubridate)
 
-bitcoin_df$timestamp <- as.POSIXct(bitcoin_df$unix_time, origin = "1970-01-01", tz="GMT")
-head(bitcoin_df)
+btc_df$timestamp <- as.POSIXct(btc_df$unix_time, origin = "1970-01-01", tz="GMT")
+head(btc_df)
+tail(btc_df)
 ```
 
 ```{r}
-dim(bitcoin_df)
-str(bitcoin_df)
-summary(bitcoin_df)
+dim(btc_df)
+str(btc_df)
+summary(btc_df)
 ```
-Looks like for BTC we have 1,956,282 rows of data, with 10 features for 1 target.
+Looks like for BTC we have 141,061 rows of data, with 10 features for 1 target.
 
 Let's only grab the first month of data since we're tracking every minute update.
 ```{r}
-btc_4month_2018
-btc_jan2018 <- bitcoin_df[bitcoin_df$timestamp < as.Date("2018-05-01 00:00:00"),]
-summary(btc_4month_2018)
+btc_3month_2021 <- btc_df[btc_df$timestamp < as.Date("2021-06-01 00:00:00"),]
+summary(btc_3month_2021)
+```
+```{r}
+short_term <- btc_df[btc_df$timestamp > as.Date("2021-06-01") & btc_df$timestamp < as.Date("2021-06-02"),]
+summary(short_term)
 ```
 
+```{r}
+long_term <- btc_df[btc_df$timestamp > as.Date("2021-06-01") & btc_df$timestamp < as.Date("2021-06-08"),]
+summary(long_term)
+```
 
 ```{r}
-write_parquet(btc_jan2018, sink="data/bitcoin_01-2018.parquet")
-write_parquet(bitcoin_df, sink="data/bitcoin_full.parquet")
+write_parquet(btc_3month_2021, sink="data/btc_3month_2021.parquet")
+write_parquet(short_term, sink="data/btc_short_term_test.parquet")
+write_parquet(long_term, sink="data/btc_long_term_test.parquet")
 ```
