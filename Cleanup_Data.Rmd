@@ -1,0 +1,46 @@
+---
+title: "Cleanup"
+author: "Taylor Bonar"
+date: "2022-07-22"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Load large dataset
+```{r}
+library(tswge)
+library(arrow)
+
+assets_df = read.csv("data/asset_details.csv")
+head(assets_df)
+
+df = read_parquet("data/train.parquet.gzip")
+head(df)
+```
+
+Extract the bitcoin dataset
+```{r}
+bitcoin_df = df[df$Asset_ID == 1,]
+head(bitcoin_df)
+```
+
+Rename timestamp to properly be unix_time/epoch time
+```{r}
+names(bitcoin_df)[names(bitcoin_df) == "timestamp"] <- 'unix_time'
+head(bitcoin_df)
+```
+
+Create some timestamps for references
+```{r}
+library(lubridate)
+
+bitcoin_df$timestamp <- as.POSIXct(bitcoin_df$unix_time, origin = "1970-01-01", tz="GMT")
+head(bitcoin_df)
+```
+
+```{r}
+write_parquet(bitcoin_df, sink="data/bitcoin.parquet")
+```
