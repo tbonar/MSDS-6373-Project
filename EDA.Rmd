@@ -14,7 +14,7 @@ knitr::opts_chunk$set(echo = FALSE)
 library(tswge)
 library(arrow)
 
-btc = read_parquet("data/bitcoin_01-2018.parquet")
+btc = read_parquet("data/btc_3month_2021.parquet")
 head(btc)
 ```
 
@@ -23,14 +23,10 @@ summary(btc)
 ```
 ```{r}
 plot(btc$timestamp, btc$Target, type="l",
-     main="Bitcoin Residualized Returns in January 2018",
+     main="Bitcoin Residualized Returns in March-May 2021",
      xlab="Date",
      ylab="15 Minute Residualized Returns")
 ```
-***Stationarity Check:**
-  * Mean - appears dependent on time
-  * Variance - appears to not be constant
-  * Correlations - follow similar patterns, however anomalies can be observed.
 
 ```{r}
 plotts.sample.wge(btc$Target)
@@ -42,8 +38,15 @@ midplusone.idx = mid.idx + 1
 acf(btc$Target[1:mid.idx],plot=T, ylim=c(-1,1))
 acf(btc$Target[midplusone.idx:end.idx],plot=T, ylim=c(-1,1))
 ```
+***Stationarity Check:**
+  * Mean - appears dependent on time
+  * Variance - appears to not be constant
+  * Correlations - follow similar patterns, however anomalies can be observed.
+  
+  
+We have 7 peaks of frequency, with the highest near 0 (about 0.0165). This in turns means we have a frequency of 0.0165 and cycle of around 60.
 
-We have 7 peaks of frequency, with the highest near 0. Let's try filtering out some of the dataset to focus on particular behaviors of interest
+Let's try filtering out some of the dataset to focus on particular behaviors of interest
 ```{r}
 ma = filter(btc$Target, rep(1,5)/5)
 plot(ma, type="l")
@@ -53,3 +56,233 @@ plot(ma, type="l")
 ma = filter(btc$Target, rep(1,60)/60)
 plot(ma, type="l")
 ```
+
+```{r}
+ma = filter(btc$Target, rep(1,1440)/1440)
+plot(ma, type="l")
+```
+
+```{r}
+pw = parzen.wge(btc$Target)
+
+peak.pzgram.index = which.max(pw$pzgram)
+
+pw$freq[1]
+
+```
+# Multiple Regression w/ Correlated Errors
+```{r}
+library(GGally)
+ggpairs(btc[3:10])
+```
+
+Analyzing Close Prices on BTC
+```{r}
+plot(btc$timestamp, btc$Close, type = "l",
+     main="BTC's Close Price over Period",
+     xlab="Date",
+     ylab="Close Price")
+```
+
+# Hypothetical BTC Target Data
+```{r}
+plot(btc$timestamp, btc$Count, type="l",
+     main="BTC Count over Mar-May 2021",
+     xlab="Date",
+     ylab="Count")
+```
+
+```{r}
+plot(btc$timestamp, btc$Open, type="l",
+     main="BTC Open Price over Mar-May 2021",
+     xlab="Date",
+     ylab="Opening Price")
+```
+
+```{r}
+plot(btc$timestamp, btc$High, type="l",
+     main="BTC High over Mar-May 2021",
+     xlab="Date",
+     ylab="Highest Price")
+```
+
+```{r}
+plot(btc$timestamp, btc$Low, type="l",
+     main="BTC Low over Mar-May 2021",
+     xlab="Date",
+     ylab="Lowest Price")
+```
+
+```{r}
+plot(btc$timestamp, btc$Close, type="l",
+     main="BTC Close over Mar-May 2021",
+     xlab="Date",
+     ylab="Close Price")
+```
+
+```{r}
+plot(btc$timestamp, btc$Volume, type="l",
+     main="BTC Volume over Mar-May 2021",
+     xlab="Date",
+     ylab="Number of CryptoAsset Units Traded")
+```
+
+```{r}
+plot(btc$timestamp, btc$VWAP, type="l",
+     main="BTC VWAP over Mar-May 2021",
+     xlab="Date",
+     ylab="Volume WEighted Average Price")
+```
+# Univariate Analysis
+
+We'll take a look at two univariate analysis, but as we saw earlier, 5 out of 6 of our features are serially correlated. We'll use one from that grouping of 5 and do a second analysis on Volume.
+
+## Open Univariate Analysis
+
+```{r}
+plotts.sample.wge(btc$Open)
+```
+```{r}
+end.idx = length(btc$Open)
+mid.idx = end.idx/2
+midplusone.idx = mid.idx + 1
+
+acf(btc$Open[1:mid.idx],plot=T, ylim=c(-1,1))
+acf(btc$Open[midplusone.idx:end.idx],plot=T, ylim=c(-1,1))
+```
+Transform to remove non-stationarity
+Find the cycle period:
+```{r}
+pw_open = parzen.wge(btc$Open)
+
+peak.pzgram.index = which.max(pw_open$pzgram)
+
+pw_open$freq[1]
+
+```
+Spectral density shows a peaked frequency of 0.00000758 giving a cycle period of 131,926 minutes.
+
+**Hourly Transformation**
+```{r}
+btc_trans_open_h = artrans.wge(btc$Open, c(rep(0,59),1))
+```
+```{r}
+aic5.wge(btc_trans_open_h)
+```
+
+```{r}
+ljung.wge(btc_trans_open_h, p=2, q=2)
+ljung.wge(btc_trans_open_h, p=2, q=2, K=48)
+```
+
+**Daily Transformation**
+```{r}
+btc_trans_open_d = artrans.wge(btc$Open, c(rep(0,1439),1))
+```
+```{r}
+aic5.wge(btc_trans_open_d)
+```
+
+```{r}
+ljung.wge(btc_trans_open_d, p=1, q=1)
+ljung.wge(btc_trans_open_d, p=1, q=1, K=48)
+```
+
+**Weekly Transformation**
+```{r}
+btc_trans_open_w = artrans.wge(btc$Open, c(rep(1,10079),1))
+```
+
+```{r}
+aic5.wge(btc_trans_open_w)
+```
+
+```{r}
+ljung.wge(btc_trans_open_w, p=3, q=0)
+ljung.wge(btc_trans_open_w, p=3, q=0, K=48)
+```
+We confidently reject that any of the Open feature is not white noise. We will need to use methods that are non-stationary to properly model the realization's behavior.
+
+## Predictions
+**Hourly**
+```{r}
+predsPart_open_h = fore.aruma.wge(btc$Open, s = 60, n.ahead = 1440, lastn=TRUE)
+```
+```{r}
+plot(predsPart_open_h$f, type = "l")
+plot(seq(1,132000,1),
+     btc$Open,
+     type = "l",
+     ylab = "BTC Open Prices",
+     main = "24 Hours BTC Open Forecast")
+lines(seq(130560,132000,1), predsPart_open_h$f, type = "l", col = "red")
+```
+
+## Volume Univariate Analysis
+```{r}
+plotts.sample.wge(btc$Volume)
+
+end.idx = length(btc$Volume)
+mid.idx = end.idx/2
+midplusone.idx = mid.idx + 1
+
+acf(btc$Volume[1:mid.idx],plot=T, ylim=c(-1,1))
+acf(btc$Volume[midplusone.idx:end.idx],plot=T, ylim=c(-1,1))
+```
+
+Transform to remove non-stationarity
+```{r}
+btc_trans_volume = artrans.wge(btc$Volume, c(rep(1,20000),1))
+```
+
+```{r}
+aic5.wge(btc$Volume)
+```
+
+# Multivariate Analysis
+
+**Step 1:** Perform a regression analysis and model the residuals.
+```{r}
+ksfit = lm(Target~Count+Open+High+Low+Close+Volume+VWAP, data=btc)
+
+phi = aic.wge(ksfit$residuals, p=0:20, q=0)
+```
+
+**Step 2:** Use ARIMA to perform the MLE analysis which estimates the coefficients in the multiple regression while simultaneously modeling Z_t as an AR(phi$p)
+```{r}
+fit = arima(btc$Target, order=c(phi$p, 0,0), xreg=btc[,3:9])
+fit
+AIC(fit)
+```
+With a model fitted to not account for lags or trends, we can see the following:
+* Our model's coefficients are very small (under 10) with some exceptions:
+  * AR(1) w/ a t-stat of 806.75
+  
+* Our psuedo-t-statistic (coefficient/s.e.)
+
+
+We fitted a model with no lags or trends, we'll take the fit$resid and check the residual plots and/or a Ljung-Box Test to confirm white noise.
+```{r}
+acf(fit$residuals)
+ltest = ljung.wge(fit$resid)
+ltest$pval
+```
+
+Visually we can see that our Residuals for ACF are not consistent with white noise. Additionally our ljung test shows a p-value of 0.
+
+Let's add a time trend!
+```{r}
+ksfit2 = lm(Target~timestamp+Count+Open+High+Low+Close+Volume+VWAP, data=btc)
+phi2 = aic.wge(ksfit2$residuals, p=0:8, q=0)
+```
+
+```{r}
+fit2 = arima(btc$Target, order=c(phi2$p, 0,0), xreg=cbind(btc$unix_time, btc[,3:9]))
+fit2
+```
+
+
+
+
+
+
