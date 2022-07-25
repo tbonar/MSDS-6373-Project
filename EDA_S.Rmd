@@ -55,7 +55,7 @@ parzen.wge(btc$Open)
 
 
 ```{r}
-parzen.sample.wge(btc$Volume)
+parzen.wge(btc$Volume)
 
 ```
 
@@ -79,16 +79,15 @@ acf(btc$Open,lag.max = 100000)
 acf(btc$Volume,lag.max = 100000)
 ```
 
+
 ```{r}
-plotts.samp.wge(btc$Target)
+parzen.wge(btc$Volume)
 ```
-
-
 
 ```{r}
 #forecast Particles
 plotts.sample.wge(CM$part) #freq near .0192 (annual)
-btc_20000 = artrans.wge(btc$Volume, c(rep(0,19999),1), lag.max = 10000)
+btc_20000 = artrans.wge(btc$Volume, c(rep(0,19999),1))
 
 plotts.sample.wge(btc_20000) #looks like some low freq?
 aic5.wge(CM_52) #picks ARMA(2,1) assume stationary
@@ -106,10 +105,59 @@ lines(seq(509,528,1), predsPart$f, type = "l", col = "red")
 ```
 
 
+```{r}
+
+```
 
 
+```{r}
+#Hourly Transformation
+btc_trans_open_h = artrans.wge(btc$Volume, c(rep(0,59),1))
+```
+Daily Transformation
+```{r}
+btc_trans_open_d = artrans.wge(btc$Volume, c(rep(0,1439),1))
+```
+Weekly Transformation
+```{r}
+btc_trans_open_w = artrans.wge(btc$Volume, c(rep(0,10079),1))
+```
+
+```{r}
+aic5.wge(btc$Volume)
+```
+
+```{r}
+aic5.wge(btc_trans_open_h)
+```
+
+```{r}
+aic5.wge(btc_trans_open_d)
+```
+
+```{r}
+aic5.wge(btc_trans_open_w)
+```
 
 
+```{r}
+predsPart_open_h = fore.aruma.wge(btc_trans_open_h, s = 60, n.ahead = 1440, lastn=TRUE)
+
+
+```
+
+
+```{r}
+plot(predsPart_open_h$f, type = "l")
+plot(seq(1,120480,1), btc$Open, type = "l",xlim = c(0,121920), ylab = "BTC Open Prices", main = "24 Hours BTC Open Forecast")
+lines(seq(120481,121920,1), predsPart$f, type = "l", col = "red")
+```
+
+```{r}
+plot(predsPart$f, type = "l")
+plot(seq(1,508,1), CM$part, type = "l",xlim = c(0,121920), ylab = "Temperature", main = "20 Week Particulate Forecast")
+lines(seq(509,121920,1), predsPart$f, type = "l", col = "red")
+```
 
 
 ```{r}
@@ -150,13 +198,58 @@ plot(ma, type="l")
 
 
 ```{r}
+CMsmall = CM[1:478,]
+```
+
+
+Forecast 1440 minutes ahead
+```{r}
+btcSMALL.short = btc[1:120480,]
+
+ksfit = lm(Target~Open+Volume, data = btcSMALL.short)
+ksfit
+phi = aic.wge(ksfit$residuals)
+phi
+
+fit = arima((btcSMALL.short,order = c(phi$p,phi$q,0), period = 1440), xreg = cbind=(btcSMALL.short$Open,btcSMALL.short$Volume))
+```
+
+
+Forecast 10080
+```{r}
 
 ```
 
 
 
 
+#Find ASE  Need to forecast last 30 of known series.  
+CMsmall = CM[1:478,]
+ksfit = lm(cmort~temp+part+Week+FWeek, data = CMsmall)
+phi = aic.wge(ksfit$residuals)
+fit = arima(CMsmall$cmort,order = c(phi$p,0,0), seasonal = list(order = c(1,0,0), period = 52), xreg = cbind(CMsmall$temp, CMsmall$part, CMsmall$Week, CMsmall$FWeek))
+AIC(fit) #AIC = 2991.85
 
+last30 = data.frame(temp = CM$temp[479:508], part = CM$part[479:508], Week = seq(479,508,1), FWeek = as.factor(seq(479,508,1)%%52))
+#get predictions
+predsCMort = predict(fit,newxreg = last30)
+
+#predict residuals manually
+plotts.sample.wge(ksfit$residuals)
+phi = aic.wge(ksfit$residuals)
+resids = fore.arma.wge(ksfit$residuals,phi = phi$phi,n.ahead = 30)
+#predict trend manually
+preds = predict(ksfit, newdata = last30)
+
+predsFinal = preds + resids$f
+
+
+plot(seq(1,508,1), CM$cmort, type = "l",xlim = c(0,528), ylab = "Cardiac Mortality", main = "20 Week Cardiac Mortality Forecast")
+lines(seq(479,508,1), predsFinal, type = "l", col = "red")
+
+
+ASE = mean((CM$cmort[479:508] - predsFinal)^2,na.rm = TRUE)
+ASE #32.2167
 
 
 
