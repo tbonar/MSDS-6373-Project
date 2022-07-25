@@ -1,0 +1,162 @@
+---
+title: "EDA"
+author: "Taylor Bonar & Satvik Ajmera"
+date: "2022-07-24"
+output: powerpoint_presentation
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+
+```{r}
+library(tswge)
+library(arrow)
+
+btc = read_parquet("data/btc_3month_2021.parquet")
+head(btc)
+pw = parzen.wge(btc$Target)
+
+peak.pzgram.index = which.max(pw$pzgram)
+
+pw$freq[1]
+plotts.wge(btc$Target)
+
+```
+```{r}
+pw$freq[1]
+```
+
+
+```{r}
+pw.VWAP = parzen.wge(btc$VWAP)
+
+peak.pzgram.index = which.max(pw.VWAP$pzgram)
+
+pw.VWAP$freq[1]
+```
+
+```{r}
+pw.VWAP = parzen.wge(btc$VWAP)
+
+peak.pzgram.index = which.max(pw.VWAP$pzgram)
+
+pw.VWAP$freq[1]
+```
+
+```{r}
+parzen.wge(btc$Count)
+```
+
+```{r}
+parzen.wge(btc$Open)
+```
+
+
+```{r}
+parzen.sample.wge(btc$Volume)
+
+```
+
+```{r}
+acf(btc$Volume,lag.max = 10000)
+```
+
+```{r}
+acf(btc$Target,lag.max = 50)
+```
+
+```{r}
+acf(btc$Open,lag.max = 100000)
+22000
+
+```
+
+
+
+```{r}
+acf(btc$Volume,lag.max = 100000)
+```
+
+```{r}
+plotts.samp.wge(btc$Target)
+```
+
+
+
+```{r}
+#forecast Particles
+plotts.sample.wge(CM$part) #freq near .0192 (annual)
+btc_20000 = artrans.wge(btc$Volume, c(rep(0,19999),1), lag.max = 10000)
+
+plotts.sample.wge(btc_20000) #looks like some low freq?
+aic5.wge(CM_52) #picks ARMA(2,1) assume stationary
+aic5.wge(CM_52,type = "bic") #picks ARMA(0,0) 
+ljung.wge(CM_52)$pval #FTR Ho
+ljung.wge(CM_52, K = 48)$pval #FTR Ho
+#Going with white noise despite peak at 0 in Spec D. 
+#est = est.arma.wge(CM_52, p = 3, q = 2)
+#CM_52_AR2_MA1 = artrans.wge(CM_52,est$phi)
+predsPart = fore.aruma.wge(CM$part,s = 52, n.ahead = 20)
+plot(predsPart$f, type = "l")
+plot(seq(1,508,1), CM$part, type = "l",xlim = c(0,528), ylab = "Temperature", main = "20 Week Particulate Forecast")
+lines(seq(509,528,1), predsPart$f, type = "l", col = "red")
+
+```
+
+
+
+
+
+
+
+
+```{r}
+summary(btc)
+```
+```{r}
+plot(btc$timestamp, btc$Target, type="l",
+     main="Bitcoin Residualized Returns in January 2018",
+     xlab="Date",
+     ylab="15 Minute Residualized Returns")
+```
+***Stationarity Check:**
+  * Mean - appears dependent on time
+  * Variance - appears to not be constant
+  * Correlations - follow similar patterns, however anomalies can be observed.
+
+```{r}
+plotts.sample.wge(btc$Target)
+
+end.idx = length(btc$Target)
+mid.idx = end.idx/2
+midplusone.idx = mid.idx + 1
+
+acf(btc$Target[1:mid.idx],plot=T, ylim=c(-1,1))
+acf(btc$Target[midplusone.idx:end.idx],plot=T, ylim=c(-1,1))
+```
+
+We have 7 peaks of frequency, with the highest near 0. Let's try filtering out some of the dataset to focus on particular behaviors of interest
+```{r}
+ma = filter(btc$Target, rep(1,5)/5)
+plot(ma, type="l")
+```
+
+```{r}
+ma = filter(btc$Target, rep(1,60)/60)
+plot(ma, type="l")
+```
+
+
+```{r}
+
+```
+
+
+
+
+
+
+
+
