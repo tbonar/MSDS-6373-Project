@@ -50,6 +50,22 @@ print(best.p)
 print(best.q)
 diff.arma.ASE
 ```
+```{r}
+# btc_threemonths.target = btc.threemonths[c("timestamp","Target")]
+timestamps = seq(as.POSIXct("2021-05-25 00:00:00", tz="GMT"), length=forecast.period, by="1 min")
+fore.short.df <- data.frame(timestamp=timestamps, Target=diff.arma.fore$f)
+
+btc.may.df <- subset(btc.threemonths, timestamp > as.POSIXct("2021-05-23 23:59:00", tz="GMT"))
+
+# plot(fore.short.df, type="l")
+btc.2days.p <- ggplot(btc.may.df, aes(x=timestamp, y=Target)) +
+  geom_line() +
+  geom_line(data=fore.short.df, color="red") +
+  ggtitle("Short Term Forecast of Target over 24 hours")
+btc.2days.p
+
+```
+
 
 ```{r}
 btc.threemonths.long= btc[1:132000,]
@@ -94,11 +110,6 @@ print(best.q)
 diff.arma.ASE
 sqrt(diff.arma.ASE)
 ```
-
-
-
-
-
 
 
 
