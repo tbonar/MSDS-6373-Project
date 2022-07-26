@@ -24,7 +24,11 @@ btc = read_parquet(file.choose())
 ```{r}
 # 132000 = 3 months + 1 week (1440 minutes)
 # 121920 = 3 months + 1 day for ASE Short term
-btc.threemonths= btc[1:121920,]
+
+# 132000 - 1 week + 1 day - short-term
+btc.threemonths.short= btc[1:123360,]
+
+#entire 3 months + 1 week
 btc.threemonths.long= btc[1:132000,]
 ```
 
