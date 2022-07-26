@@ -38,7 +38,7 @@ best.p = diff.p.q$`   p`[1]
 best.q = diff.p.q$`   q`[1] # choose ARMA(best.p,best.q)
 diff.arma.est = est.arma.wge(Dif.60, p = best.p,q = best.q)
 forecast.period = 1440
-diff.arma.fore = fore.aruma.wge(btc.threemonths$Target,phi = c(diff.arma.est$phi),theta = c(diff.arma.est$theta),s=60,  n.ahead = forecast.period, lastn = TRUE, limits = TRUE)
+diff.arma.fore = fore.aruma.wge(btc.threemonths$Target,phi = c(diff.arma.est$phi),theta = c(diff.arma.est$theta),s=60,  n.ahead = forecast.period, lastn = TRUE, limits = FALSE)
 start.len = length(btc.threemonths$Target)-forecast.period+1
 end.len = length(btc.threemonths$Target)
 diff.arma.ASE = mean((btc.threemonths$Target[start.len:end.len] - diff.arma.fore$f)^2)
@@ -88,4 +88,69 @@ diff.arma.ASE = mean((btc.threemonths.long$Target[start.len:end.len] - diff.arma
 print(best.p)
 print(best.q)
 diff.arma.ASE
+sqrt(diff.arma.ASE)
 ```
+
+
+
+
+
+
+
+
+
+```{r}
+Open = btc.threemonths$Open
+btc.threemonths= btc[1:121920,]
+Dif.1440 = artrans.wge(Open,phi.tr = c(rep(0,1439),1))
+diff.p.q= aic5.wge(Dif.1440, type = "bic", p = 0:8,q=0:8) #p=0:6,q=0:6) 
+best.p = diff.p.q$`   p`[1] 
+best.q = diff.p.q$`   q`[1] # choose ARMA(best.p,best.q)
+diff.arma.est = est.arma.wge(Dif.1440, p = best.p,q = best.q)
+forecast.period = 1440
+diff.arma.fore = fore.aruma.wge(Open,phi = c(diff.arma.est$phi),theta = c(diff.arma.est$theta),s=1440,  n.ahead = forecast.period, lastn = TRUE, limits = FALSE)
+start.len = length(Open)-forecast.period+1
+end.len = length(Open)
+diff.arma.ASE = mean((Open[start.len:end.len] - diff.arma.fore$f)^2)
+print(best.p)
+print(best.q)
+diff.arma.ASE
+
+```
+
+```{r}
+Open = btc.threemonths$Open
+btc.threemonths= btc[1:121920,]
+Dif.60 = artrans.wge(Open,phi.tr = c(rep(0,59),1))
+diff.p.q= aic5.wge(Dif.60, type = "bic") #p=0:6,q=0:6) 
+best.p = diff.p.q$`   p`[1] 
+best.q = diff.p.q$`   q`[1] # choose ARMA(best.p,best.q)
+diff.arma.est = est.arma.wge(Dif.60, p = best.p,q = best.q)
+forecast.period = 1440
+diff.arma.fore = fore.aruma.wge(Open,phi = c(diff.arma.est$phi),theta = c(diff.arma.est$theta),s=60,  n.ahead = forecast.period, lastn = TRUE, limits = FALSE)
+start.len = length(Open)-forecast.period+1
+end.len = length(Open)
+diff.arma.ASE = mean((Open[start.len:end.len] - diff.arma.fore$f)^2)
+print(best.p)
+print(best.q)
+diff.arma.ASE
+```
+
+
+
+
+
+
+
+```{r}
+plot(diff.arma.fore$f, type = "l")
+plot(seq(1,120480,1), Open, type = "l",xlim = c(0,121920), ylab = "BTC Open Prices", main = "24 Hours BTC Open Forecast")
+lines(seq(120481,121920,1), diff.arma.fore$f, type = "l", col = "red")
+```
+
+```{r}
+plot(predsPart$f, type = "l")
+plot(seq(1,508,1), CM$part, type = "l",xlim = c(0,528), ylab = "Temperature", main = "20 Week Particulate Forecast")
+lines(seq(509,528,1), predsPart$f, type = "l", col = "red")
+```
+
