@@ -1,0 +1,177 @@
+---
+title: "EDA"
+author: "Taylor Bonar & Satvik Ajmera"
+date: "2022-07-24"
+output: powerpoint_presentation
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+
+```{r}
+library(tswge)
+library(arrow)
+
+btc = read_parquet(file.choose())
+
+
+
+
+```
+
+```{r}
+# 132000 = 3 months + 1 week (1440 minutes)
+# 121920 = 3 months + 1 day for ASE Short term
+
+# 132000 - 1 week + 1 day - short-term
+# 132000-(24*7*60)+1440
+btc.threemonths.short= btc[1:123360,]
+
+#entire 3 months + 1 week
+btc.threemonths.long= btc[1:132000,]
+
+btc.threemonths= btc[1:132000,]
+```
+
+
+
+```{r}
+btc.threemonths.short = btc[1:123360,]
+Dif.60 = artrans.wge(btc.threemonths.short$Open,phi.tr = c(rep(0,59),1))
+diff.p.q= aic5.wge(Dif.60, type = "bic") #p=0:6,q=0:6) 
+best.p = diff.p.q$`   p`[1] 
+best.q = diff.p.q$`   q`[1] # choose ARMA(best.p,best.q)
+diff.arma.est = est.arma.wge(Dif.60, p = best.p,q = best.q)
+forecast.period = 1440
+diff.arma.fore = fore.aruma.wge(btc.threemonths.short$Open,phi = c(diff.arma.est$phi),theta = c(diff.arma.est$theta),s=60,  n.ahead = forecast.period, lastn = TRUE, limits = FALSE)
+start.len = length(btc.threemonths.short$Open)-forecast.period+1
+end.len = length(btc.threemonths.short$Open)
+diff.arma.ASE = mean((btc.threemonths.short$Open[start.len:end.len] - diff.arma.fore$f)^2)
+print(best.p)
+print(best.q)
+diff.arma.ASE
+sqrt(diff.arma.ASE)
+```
+```{r}
+library(tidyverse)
+btc.threemonths.short.gg = btc[120000:123360,]
+# btc_threemonths.target = btc.threemonths[c("timestamp","Target")]
+timestamps = seq(as.POSIXct("2021-05-24 23:59:00", tz="GMT"), length=forecast.period, by="1 min")
+fore.short.df <- data.frame(timestamp=timestamps, Open=diff.arma.fore$f)
+
+btc.may.df <- subset(btc.threemonths.short.gg, timestamp < as.POSIXct("2021-05-24 23:59:00", tz="GMT"))
+
+plot(fore.short.df, type="l")
+btc.2days.p <- ggplot(data=btc.may.df, aes(x=timestamp, y=Open)) +
+  geom_line() +
+  geom_line(data=fore.short.df, color="red")+
+  ggtitle("Short Term Forecast of Target over 24 hours")
+btc.2days.p
+
+```
+
+
+```{r}
+btc.threemonths.long= btc[1:132000,]
+Dif.60 = artrans.wge(btc.threemonths.long$Target,phi.tr = c(rep(0,59),1))
+diff.p.q= aic5.wge(Dif.60, type = "bic") #p=0:6,q=0:6) 
+best.p = diff.p.q$`   p`[1] 
+best.q = diff.p.q$`   q`[1] # choose ARMA(best.p,best.q)
+diff.arma.est = est.arma.wge(Dif.60, p = best.p,q = best.q)
+forecast.period = 10080
+diff.arma.fore = fore.aruma.wge(btc.threemonths.long$Target,phi = c(diff.arma.est$phi),theta = c(diff.arma.est$theta),s=60,  n.ahead = forecast.period, lastn = TRUE, limits = TRUE)
+start.len = length(btc.threemonths.long$Target)-forecast.period+1
+end.len = length(btc.threemonths.long$Target)
+diff.arma.ASE = mean((btc.threemonths.long$Target[start.len:end.len] - diff.arma.fore$f)^2)
+print(best.p)
+print(best.q)
+diff.arma.ASE
+```
+
+```{r}
+# 132000 = 3 months + 1 week (1440 minutes)
+# 121920 = 3 months + 1 day for ASE Short term
+btc.threemonths= btc[1:121920,]
+btc.threemonths.long= btc[1:132000,]
+```
+
+
+
+```{r}
+btc.threemonths.long= btc[1:132000,]
+Dif.60 = artrans.wge(btc.threemonths.long$Target,phi.tr = c(rep(0,10079),1))
+diff.p.q= aic5.wge(Dif.60, type = "bic") #p=0:6,q=0:6) 
+best.p = diff.p.q$`   p`[1] 
+best.q = diff.p.q$`   q`[1] # choose ARMA(best.p,best.q)
+diff.arma.est = est.arma.wge(Dif.60, p = best.p,q = best.q)
+forecast.period = 66000
+diff.arma.fore = fore.aruma.wge(btc.threemonths.long$Target,phi = c(diff.arma.est$phi),theta = c(diff.arma.est$theta),s=10080,  n.ahead = forecast.period, lastn = TRUE, limits = TRUE)
+start.len = length(btc.threemonths.long$Target)-forecast.period+1
+end.len = length(btc.threemonths.long$Target)
+diff.arma.ASE = mean((btc.threemonths.long$Target[start.len:end.len] - diff.arma.fore$f)^2)
+print(best.p)
+print(best.q)
+diff.arma.ASE
+sqrt(diff.arma.ASE)
+```
+
+
+
+
+```{r}
+Open = btc.threemonths$Open
+btc.threemonths= btc[1:121920,]
+Dif.1440 = artrans.wge(Open,phi.tr = c(rep(0,1439),1))
+diff.p.q= aic5.wge(Dif.1440, type = "bic", p = 0:8,q=0:8) #p=0:6,q=0:6) 
+best.p = diff.p.q$`   p`[1] 
+best.q = diff.p.q$`   q`[1] # choose ARMA(best.p,best.q)
+diff.arma.est = est.arma.wge(Dif.1440, p = best.p,q = best.q)
+forecast.period = 1440
+diff.arma.fore = fore.aruma.wge(Open,phi = c(diff.arma.est$phi),theta = c(diff.arma.est$theta),s=1440,  n.ahead = forecast.period, lastn = TRUE, limits = FALSE)
+start.len = length(Open)-forecast.period+1
+end.len = length(Open)
+diff.arma.ASE = mean((Open[start.len:end.len] - diff.arma.fore$f)^2)
+print(best.p)
+print(best.q)
+diff.arma.ASE
+
+```
+
+```{r}
+Open = btc.threemonths$Open
+btc.threemonths= btc[1:121920,]
+Dif.60 = artrans.wge(Open,phi.tr = c(rep(0,59),1))
+diff.p.q= aic5.wge(Dif.60, type = "bic") #p=0:6,q=0:6) 
+best.p = diff.p.q$`   p`[1] 
+best.q = diff.p.q$`   q`[1] # choose ARMA(best.p,best.q)
+diff.arma.est = est.arma.wge(Dif.60, p = best.p,q = best.q)
+forecast.period = 1440
+diff.arma.fore = fore.aruma.wge(Open,phi = c(diff.arma.est$phi),theta = c(diff.arma.est$theta),s=60,  n.ahead = forecast.period, lastn = TRUE, limits = FALSE)
+start.len = length(Open)-forecast.period+1
+end.len = length(Open)
+diff.arma.ASE = mean((Open[start.len:end.len] - diff.arma.fore$f)^2)
+print(best.p)
+print(best.q)
+diff.arma.ASE
+```
+
+
+
+
+
+
+
+```{r}
+plot(diff.arma.fore$f, type = "l")
+plot(seq(1,120480,1), Open, type = "l",xlim = c(0,121920), ylab = "BTC Open Prices", main = "24 Hours BTC Open Forecast")
+lines(seq(120481,121920,1), diff.arma.fore$f, type = "l", col = "red")
+```
+
+```{r}
+plot(predsPart$f, type = "l")
+plot(seq(1,508,1), CM$part, type = "l",xlim = c(0,528), ylab = "Temperature", main = "20 Week Particulate Forecast")
+lines(seq(509,528,1), predsPart$f, type = "l", col = "red")
+```
+
