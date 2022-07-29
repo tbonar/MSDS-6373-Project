@@ -1,0 +1,21 @@
+---
+title: "Multivariate Analysis"
+author: "Taylor Bonar"
+output: html_notebook
+---
+
+```{r}
+library(tswge)
+library(arrow)
+library(lubridate)
+library(tidyverse)
+
+train = read_parquet("data/btc-train.parquet")
+test.short = read_parquet("data/btc-test-short.parquet")
+test.long = read_parquet("data/btc-test-long.parquet")
+
+# Clean into human-readable dates
+train <- train %>% mutate(timestamp = as_datetime(timestamp))
+test.short <- test.short %>% mutate(timestamp = as_datetime(timestamp))
+test.long <- test.long %>% mutate(timestamp = as_datetime(timestamp))
+```
