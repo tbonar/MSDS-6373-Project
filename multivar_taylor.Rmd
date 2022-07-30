@@ -19,3 +19,154 @@ train <- train %>% mutate(timestamp = as_datetime(timestamp))
 test.short <- test.short %>% mutate(timestamp = as_datetime(timestamp))
 test.long <- test.long %>% mutate(timestamp = as_datetime(timestamp))
 ```
+TODO: Check with Satvik on truncating data to get a period of time where covariance structure is constant (i.e., is our three month period sufficient)
+
+# EDA
+
+We are interested in identifying variables that impact BTC's Open price (Y) (variable Open in train)
+
+We will avoid using variables such as Close, Low, & High to avoid data leakage and redundancy.
+* Close is what we are essentially using with a lag 1 in an AR previously.
+
+This leaves us with remaining variables to forecast the Open price for BTC:
+* Count (X_1) -- the number of trades taking place this minute
+* Volume (X_2) -- The number of cryptoasset units traded during the minute
+* VWAP (X_3) -- The volume weighted average price for the minute
+* Target (X_4) -- 15 minute residualized returns
+
+Let's plot the data
+```{r}
+library(ggplot2)
+library(dplyr)
+```
+
+```{r}
+#plot(train$timestamp, train$Open)
+ggplot(train, aes(x=timestamp, y=Open)) +
+  geom_line() +
+  xlab("Timestamp") +
+  ylab("BTC Open Price") +
+  ggtitle("BTC Open Price over Time")
+```
+
+```{r}
+ggplot(train, aes(x=timestamp, y=VWAP)) +
+  geom_line() +
+  xlab("Timestamp") +
+  ylab("Volume Weighted Average Price") +
+  ggtitle("BTC VWAP over Time")
+```
+VWAP may be serially correlated to Open as they have similar structure. This may provide data leakage and may need to be removed.
+
+
+```{r}
+ggplot(train, aes(x=timestamp, y=Count)) +
+  geom_line() +
+  xlab("Timestamp") +
+  ylab("BTC Trade Count")  +
+  ggtitle("BTC Count over Time")
+```
+
+```{r}
+ggplot(train, aes(x=timestamp, y=Volume)) +
+  geom_line() +
+  xlab("Timestamp") +
+  ylab("Cryptoassets Units Traded") +
+  ggtitle("BTC Volume over Time")
+```
+The Volume and Count may be serially correlated structurally
+
+```{r}
+ggplot(train, aes(x=timestamp, y=Target)) +
+  geom_line() +
+  xlab("Timestamp") +
+  ylab("Value of 15 Minute Residualized Return") +
+  ggtitle("BTC Residualized Returns over Time")
+```
+The Residualized Return (Target) has a higher frequency as we already knew. This really is a moving average pass-through of the data that we discovered in our EDA. However, it does look serially correlated with some peaks in the data, but structurally is different.
+
+For now we'll remove the VWAP variable due to data leakage, and use the remaining 3 variables.
+
+# Multiple Regression with Correlated Errors
+
+Step 1: Perform a regression analysis and model the residuals
+```{r}
+# m = 3, n = 132,477
+ksfit = lm(data=train, Open~Count+Volume+Target)
+```
+
+Examine our ksfit residuals for correlation and distribution
+```{r}
+plot(ksfit$residuals)
+```
+
+Get AR(p) model identification using AIC for our Z_t 
+```{r}
+phi = aic.wge(ksfit$residuals, p=0:10, q=0) # AIC picks 10
+# residual assumption: uncorrelated and normally distributed; challenge that assumption
+```
+
+
+```{r}
+phi2 = aic.wge(ksfit$residuals, p=0:20, q=0) # AIC picks 20; ew
+# residual assumption: uncorrelated and normally distributed; challenge that assumption
+```
+
+Step 2: Use function ARIMA to perform the MLE analysis
+* estimates the coefficients in the multiple regression while simultaneously modelling Z_t as an AR(phi$p)
+```{r}
+fit = arima(train$Open, order=c(phi$p, 0, 0), xreg=cbind(train$Count, train$Volume, train$Target))
+```
+Note: fit$coef contains the AR coefficients, the constant, and the coefficients on Count, Volume, and Target
+
+fit should produce "dummy" output w/ a phi$p=10
+```{r}
+fit
+```
+We can see our 10 phis (ar1-ar10), intercept, and our coefficients of our bound explanatory variables.
+Note: it is a parameter estimate table; we'll use the standard error (s.e.) to determine what variables are significant or not
+* arima function doesn't give p-values, but if the absolute value of the coefficient is over two times the SE, this is evidence at the .05 level that the variable is useful! (i.e., z or t statistic value > 2*s.e. == evidence of the alpha 0.05 level is useful)
+
+**Multiple Regression Equation:**  
+Open = 52,856.0573 - 0.0023(Count) + 0.0187(Volume) - 1076.3974(Target)
+
+
+Initial model residuals are in fit$residuals, and they should be white
+* Can be checked with residual plots and/or Ljung-Box Test.
+* Compare competing models with AIC/AICC/BIC etc.
+```{r}
+acf(fit$residuals)
+ltest = ljung.wge(fit$residuals)
+ltest$pval
+```
+It looks like for the ACF, we have 8 small lags outside of our limits, and on our LJung-Box test, our p-value is so small it is 0. This entails we favor the alternative hypothesis and reject our null hypothesis, therefore, our residuals are not white noise.
+
+These results are not enlightening or encouraging. So let's look into the time trend.
+```{r}
+# m = 4, n = 132,477
+ksfit_time = lm(data=train, Open~timestamp+Count+Volume+Target)
+phi_time = aic.wge(ksfit_time$residuals, p=0:10, q=0)  # AIC picks p=10
+```
+
+```{r}
+fit_train = arima(train$Open, order=c(phi$p, 0, 0), xreg=cbind(train$timestamp, train$Count, train$Volume, train$Target))
+```
+
+```{r}
+fit_train
+```
+
+**Multiple Regression Equation:**  
+Open = intercept? + ?(timestamp) - ?(Count) + ?(Volume) - ?(Target)
+
+It broke.... May need to keep epoch og value and mutate to new timestamp to use properly.
+
+# Lagged Variables
+
+BTC's Open price didn't seem predictable off of timestamp, count, volume, or target, but what if it had an lagged effect.
+
+
+
+
+
+
