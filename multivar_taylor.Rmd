@@ -14,12 +14,17 @@ train = read_parquet("data/btc-train.parquet")
 test.short = read_parquet("data/btc-test-short.parquet")
 test.long = read_parquet("data/btc-test-long.parquet")
 
-# Clean into human-readable dates
-train <- train %>% mutate(timestamp = as_datetime(timestamp))
-test.short <- test.short %>% mutate(timestamp = as_datetime(timestamp))
-test.long <- test.long %>% mutate(timestamp = as_datetime(timestamp))
+names(train)[1] <- "unix_time"
+names(test.short)[1] <- "unix_time"
+names(test.long)[1] <- "unix_time"
 ```
-TODO: Check with Satvik on truncating data to get a period of time where covariance structure is constant (i.e., is our three month period sufficient)
+
+```{r}
+# Clean into human-readable dates
+train <- train %>% mutate(timestamp = as_datetime(unix_time))
+test.short <- test.short %>% mutate(timestamp = as_datetime(unix_time))
+test.long <- test.long %>% mutate(timestamp = as_datetime(unix_time))
+```
 
 # EDA
 
@@ -144,29 +149,87 @@ It looks like for the ACF, we have 8 small lags outside of our limits, and on ou
 These results are not enlightening or encouraging. So let's look into the time trend.
 ```{r}
 # m = 4, n = 132,477
-ksfit_time = lm(data=train, Open~timestamp+Count+Volume+Target)
+ksfit_time = lm(data=train, Open~unix_time+Count+Volume+Target)  # Correlation between Volume and Count; removing Count
 phi_time = aic.wge(ksfit_time$residuals, p=0:10, q=0)  # AIC picks p=10
-```
-
-```{r}
-fit_train = arima(train$Open, order=c(phi$p, 0, 0), xreg=cbind(train$timestamp, train$Count, train$Volume, train$Target))
-```
-
-```{r}
+fit_train = arima(train$Open, order=c(phi$p, 0, 0), xreg=cbind(train$unix_time, train$Count, train$Volume, train$Target))
 fit_train
 ```
 
 **Multiple Regression Equation:**  
 Open = intercept? + ?(timestamp) - ?(Count) + ?(Volume) - ?(Target)
 
-It broke.... May need to keep epoch og value and mutate to new timestamp to use properly.
-
 # Lagged Variables
 
 BTC's Open price didn't seem predictable off of timestamp, count, volume, or target, but what if it had an lagged effect.
 
+Let's explore potential lagged variables
+
+```{r}
+ccf(train$Open, train$Count)
+```
+Lag 2 or 3?
+
+```{r}
+ccf(train$Open, train$Volume)
+```
+Lag 2?
+
+```{r}
+ccf(train$Open, train$Target)
+```
+Need to identify potential lagged relationships between explanatory variables and response.
+
+# VAR
+
+Count Estimates
+```{r}
+count.best.p = aic.wge(train$Count, p=0:15, q=0:0)
+count.est = est.ar.wge(train$Count, count.best.p$p)
+fore.arma.wge(train$Count, phi=count.est$phi, n.ahead=1440, lastn=FALSE, limits=FALSE)
+```
+
+Volume Estimates
+```{r}
+volume.best.p = aic.wge(train$Volume, p=0:15, q=0:0)
+volume.est = est.ar.wge(train$Volume, volume.best.p$p)
+fore.arma.wge(train$Count, phi=volume.est$phi, n.ahead=1440, lastn=FALSE, limits=FALSE)
+```
+
+15 min Residualized Returns Estimates
+```{r}
+target.best.p = aic.wge(train$Target, p=0:15, q=0:0)
+target.est = est.ar.wge(train$Target, volume.best.p$p)
+fore.arma.wge(train$Target, phi=target.est$phi, n.ahead=1440, lastn=FALSE, limits=FALSE)
+```
+
+Modelling
+```{r}
+library(vars)
+
+X = cbind(train$Count, train$Volume, train$Target)
+VARselect(X, lag.max = 45, season = NULL, exogen = NULL)
+# VARselect picks p=45 using AIC, HQ, SC, & FPE
+```
+
+```{r}
+lsfit = VAR(X, p=45, type='const')
+lsfit
+```
 
 
+```{r}
+pred = predict(lsfit, n.ahead=1440)
+pred
+```
 
+```{r}
+# Example forecasts
+pred$fcst$y1[1:5,1]
+```
 
+```{r}
+library(RColorBrewer)
+
+fanchart(pred, colors=brewer.pal(n=8, name = "Blues"))
+```
 
