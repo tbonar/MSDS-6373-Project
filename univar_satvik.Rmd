@@ -74,21 +74,61 @@ btc.2days.p
 
 
 ```{r}
+#Long-Forecast
 btc.threemonths.long= btc[1:132000,]
-Dif.60 = artrans.wge(btc.threemonths.long$Target,phi.tr = c(rep(0,59),1))
+Dif.60 = artrans.wge(btc.threemonths.long$Open,phi.tr = c(rep(0,59),1))
 diff.p.q= aic5.wge(Dif.60, type = "bic") #p=0:6,q=0:6) 
 best.p = diff.p.q$`   p`[1] 
 best.q = diff.p.q$`   q`[1] # choose ARMA(best.p,best.q)
 diff.arma.est = est.arma.wge(Dif.60, p = best.p,q = best.q)
 forecast.period = 10080
-diff.arma.fore = fore.aruma.wge(btc.threemonths.long$Target,phi = c(diff.arma.est$phi),theta = c(diff.arma.est$theta),s=60,  n.ahead = forecast.period, lastn = TRUE, limits = TRUE)
-start.len = length(btc.threemonths.long$Target)-forecast.period+1
-end.len = length(btc.threemonths.long$Target)
-diff.arma.ASE = mean((btc.threemonths.long$Target[start.len:end.len] - diff.arma.fore$f)^2)
+diff.arma.fore = fore.aruma.wge(btc.threemonths.long$Open,phi = c(diff.arma.est$phi),theta = c(diff.arma.est$theta),s=60,  n.ahead = forecast.period, lastn = TRUE, limits = FALSE)
+start.len = length(btc.threemonths.long$Open)-forecast.period+1
+end.len = length(btc.threemonths.long$Open)
+diff.arma.ASE = mean((btc.threemonths.long$Open[start.len:end.len] - diff.arma.fore$f)^2)
 print(best.p)
 print(best.q)
 diff.arma.ASE
 ```
+
+```{r}
+library(tidyverse)
+btc.threemonths.long.gg = btc[115000:132000,]
+# btc_threemonths.target = btc.threemonths[c("timestamp","Target")]
+timestamps = seq(as.POSIXct("2021-05-24 23:59:00", tz="GMT"), length=10080, by="1 min")
+fore.long.df <- data.frame(timestamp=timestamps, Open=diff.arma.fore$f)
+
+btc.next.df <- subset(btc.threemonths.long.gg, timestamp < as.POSIXct("2021-05-24 23:59:00", tz="GMT"))
+
+# plot(fore.short.df, type="l")
+btc.2days.p <- ggplot(data=btc.next.df, aes(x=timestamp, y=Open)) +
+  geom_line() +
+  geom_line(data=fore.long.df, color="red")+
+  ggtitle("Short Term Forecast of Target over 1 week")
+btc.2days.p
+```
+
+
+```{r}
+btc.threemonths.short.gg = btc[120000:123360,]
+# btc_threemonths.target = btc.threemonths[c("timestamp","Target")]
+timestamps = seq(as.POSIXct("2021-05-24 23:59:00", tz="GMT"), length=forecast.period, by="1 min")
+fore.short.df <- data.frame(timestamp=timestamps, Open=diff.arma.fore$f)
+
+btc.may.df <- subset(btc.threemonths.short.gg, timestamp < as.POSIXct("2021-05-24 23:59:00", tz="GMT"))
+
+plot(fore.short.df, type="l")
+btc.2days.p <- ggplot(data=btc.may.df, aes(x=timestamp, y=Open)) +
+  geom_line() +
+  geom_line(data=fore.short.df, color="red")+
+  ggtitle("Short Term Forecast of Target over 24 hours")
+btc.2days.p
+```
+
+
+
+
+
 
 ```{r}
 # 132000 = 3 months + 1 week (1440 minutes)
