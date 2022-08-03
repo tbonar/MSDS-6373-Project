@@ -1,6 +1,6 @@
 ---
 title: "univar_Taylor"
-author: "Taylor Bonar"
+author: "Taylor Bonar & Satvik Ajmera"
 date: "2022-07-27"
 output: pdf_document
 ---

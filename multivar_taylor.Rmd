@@ -1,7 +1,7 @@
 ---
 title: "Multivariate Analysis"
-author: "Taylor Bonar"
-output: html_notebook
+author: "Taylor Bonar & Satvik Ajmera"
+output: pdf_document
 ---
 
 ```{r}
@@ -13,6 +13,9 @@ library(tidyverse)
 train = read_parquet("data/btc-train.parquet")
 test.short = read_parquet("data/btc-test-short.parquet")
 test.long = read_parquet("data/btc-test-long.parquet")
+
+# Reduce to a week of training data due to issues with library/performance
+train = subset(train, timestamp > as.POSIXct("2021-05-24 23:59:00", tz="GMT"))
 
 names(train)[1] <- "unix_time"
 names(test.short)[1] <- "unix_time"
@@ -40,19 +43,15 @@ This leaves us with remaining variables to forecast the Open price for BTC:
 * Target (X_4) -- 15 minute residualized returns
 
 Let's plot the data
-```{r}
-library(ggplot2)
-library(dplyr)
-```
 
 ```{r}
-#plot(train$timestamp, train$Open)
 ggplot(train, aes(x=timestamp, y=Open)) +
   geom_line() +
   xlab("Timestamp") +
   ylab("BTC Open Price") +
   ggtitle("BTC Open Price over Time")
 ```
+In our response variable, Open, we can observe a wandering behavior of the BTC opening price over the last week of May in 2021.
 
 ```{r}
 ggplot(train, aes(x=timestamp, y=VWAP)) +
@@ -92,144 +91,324 @@ The Residualized Return (Target) has a higher frequency as we already knew. This
 
 For now we'll remove the VWAP variable due to data leakage, and use the remaining 3 variables.
 
+
+
 # Multiple Regression with Correlated Errors
 
 Step 1: Perform a regression analysis and model the residuals
-```{r}
-# m = 3, n = 132,477
-ksfit = lm(data=train, Open~Count+Volume+Target)
-```
 
-Examine our ksfit residuals for correlation and distribution
+We create a linear regression utilizing 3 additional variables: Count, Volume, and 15 Minutes Residual Returns (Target)
 ```{r}
-plot(ksfit$residuals)
+# m = 3, n = 10080
+ksfit = lm(data=train, Open~Count+Volume+Target)
 ```
 
 Get AR(p) model identification using AIC for our Z_t 
 ```{r}
-phi = aic.wge(ksfit$residuals, p=0:10, q=0) # AIC picks 10
+phi = aic.wge(ksfit$residuals, p=0:10, q=0) # AIC picks p=10
 # residual assumption: uncorrelated and normally distributed; challenge that assumption
-```
-
-
-```{r}
-phi2 = aic.wge(ksfit$residuals, p=0:20, q=0) # AIC picks 20; ew
-# residual assumption: uncorrelated and normally distributed; challenge that assumption
+phi
 ```
 
 Step 2: Use function ARIMA to perform the MLE analysis
 * estimates the coefficients in the multiple regression while simultaneously modelling Z_t as an AR(phi$p)
 ```{r}
 fit = arima(train$Open, order=c(phi$p, 0, 0), xreg=cbind(train$Count, train$Volume, train$Target))
+fit
 ```
 Note: fit$coef contains the AR coefficients, the constant, and the coefficients on Count, Volume, and Target
 
 fit should produce "dummy" output w/ a phi$p=10
-```{r}
-fit
-```
+
 We can see our 10 phis (ar1-ar10), intercept, and our coefficients of our bound explanatory variables.
 Note: it is a parameter estimate table; we'll use the standard error (s.e.) to determine what variables are significant or not
 * arima function doesn't give p-values, but if the absolute value of the coefficient is over two times the SE, this is evidence at the .05 level that the variable is useful! (i.e., z or t statistic value > 2*s.e. == evidence of the alpha 0.05 level is useful)
 
-**Multiple Regression Equation:**  
-Open = 52,856.0573 - 0.0023(Count) + 0.0187(Volume) - 1076.3974(Target)
+Is Count a useful variable? **Yes!**
+|-0.0036| > 2 * 0.0007
+0.0036 > 0.0014
 
+Is Volume a useful variable? **Yes!**
+|0.0451| > 2 * 0.0100
+0.0451 > 0.02 
+
+Is Target a useful variable? **No**
+|-1038.1181| > 2 * 693.2666
+1018.627 < 1,386.53
+
+**Multiple Regression Equation:**  
+Open = 37,080.6242 - 0.0036(Count) + 0.0454(Volume) - 1018.627(Target)
 
 Initial model residuals are in fit$residuals, and they should be white
 * Can be checked with residual plots and/or Ljung-Box Test.
 * Compare competing models with AIC/AICC/BIC etc.
 ```{r}
+plot(fit$residuals)
 acf(fit$residuals)
 ltest = ljung.wge(fit$residuals)
 ltest$pval
 ```
-It looks like for the ACF, we have 8 small lags outside of our limits, and on our LJung-Box test, our p-value is so small it is 0. This entails we favor the alternative hypothesis and reject our null hypothesis, therefore, our residuals are not white noise.
+It looks like for the ACF, we have 8 small lags outside of our limits, and on our LJung-Box test, our p-value is 0.296. We fail to reject the null hypothesis.
 
 These results are not enlightening or encouraging. So let's look into the time trend.
 ```{r}
 # m = 4, n = 132,477
-ksfit_time = lm(data=train, Open~unix_time+Count+Volume+Target)  # Correlation between Volume and Count; removing Count
+t = 1:length(train$Open)
+ksfit_time = lm(data=train, Open~unix_time+Count+Volume+Target)
 phi_time = aic.wge(ksfit_time$residuals, p=0:10, q=0)  # AIC picks p=10
-fit_train = arima(train$Open, order=c(phi$p, 0, 0), xreg=cbind(train$unix_time, train$Count, train$Volume, train$Target))
+fit_train = arima(train$Open, order=c(phi$p, 0, 0), xreg=cbind(t, train$Count, train$Volume, train$Target))
 fit_train
 ```
 
 **Multiple Regression Equation:**  
-Open = intercept? + ?(timestamp) - ?(Count) + ?(Volume) - ?(Target)
+Open = 39,160.291 - 0.4126(minutes) - 0.0036(Count) + 0.0451(Volume) - 1,029.5847(Target)
+
+Is the time trend a useful variable? **Yes!**
+|-0.4126| > 2 * 0.1612
+0.4126 > 0.3224
+
+Is Count a useful variable? **Yes!**
+|-0.0036| > 2 * 0.0006
+0.0036 > 0.0012
+
+Is Volume a useful variable? **Yes!**
+|0.0451| > 2 * 0.0100
+0.0451 > 0.02 
+
+Is Target a useful variable? **No**
+|-1028.5847| > 2 * 693.2666
+1028.5847 < 1,386.925
+
+```{r}
+plot(fit2$residuals)
+acf(fit2$residuals)
+ltest2 = ljung.wge(fit2$residuals)
+ltest2$pval
+```
+
 
 # Lagged Variables
 
-BTC's Open price didn't seem predictable off of timestamp, count, volume, or target, but what if it had an lagged effect.
+BTC's Open price didn't seem to have much significance with our residualized returns, Target, but what if it had an lagged effect?
 
 Let's explore potential lagged variables
 
 ```{r}
-ccf(train$Open, train$Count)
-```
-Lag 2 or 3?
-
-```{r}
-ccf(train$Open, train$Volume)
-```
-Lag 2?
-
-```{r}
 ccf(train$Open, train$Target)
 ```
-Need to identify potential lagged relationships between explanatory variables and response.
+Using the ccf function, we can compute and check the estimates of our cross-correlations for Open and Target. We can observe that at lag 2, there appears to be a strong cross-correlation with the BTC Open price. Let's create a lagged 2 of Target and see how it affects our model.
+
+
+```{r}
+target_lagged2 = dplyr::lag(train$Target, 2)
+train$Target_Lagged2 = target_lagged2
+
+ksfit.lagged = lm(data=train, Open~Count+Volume+Target_Lagged2)
+phi.lagged = aic.wge(ksfit_time$residuals, p=0:10, q=0)  # AIC picks p=10
+fit.lagged = arima(train$Open, order=c(phi.lagged$p, 0, 0), xreg=cbind(train$Count, train$Volume, train$Target_Lagged2))
+fit.lagged
+```
+Here we can see the Target of lag 2 variable is now highly significant to the model.
+
+Is Target, with a lag of 2, a useful variable? **Yes!**
+|-19215.2742| > 2 * 635.5321
+19215.2742 > 1,271.064
+
+Lastly, let's examine our time trend with this lagged variable.
+
+```{r}
+ksfit.lagged.time = lm(data=train, Open~Count+Volume+Target_Lagged2)
+phi.lagged.time = aic.wge(ksfit_time$residuals, p=0:10, q=0)  # AIC picks p=10
+fit.lagged.time = arima(train$Open, order=c(phi.lagged.time$p, 0, 0), xreg=cbind(t, train$Count, train$Volume, train$Target_Lagged2))
+fit.lagged.time
+```
+
 
 # VAR
+Let's look at lagged values of our explanatory variables and how they might interact with the BTC Open price. We want to predict the Open time series with its own lagged values and any lagged values of our explanatory variables: Count, Volume, Target.
 
-Count Estimates
+Open Univariate Forecasts
 ```{r}
-count.best.p = aic.wge(train$Count, p=0:15, q=0:0)
-count.est = est.ar.wge(train$Count, count.best.p$p)
+open.best.p = aic.wge(train$Open, p=0:20, q=0:0) # AIC picks p = 3
+open.est = est.ar.wge(train$Open, open.best.p$p) # Estimate the parameters
+fore.arma.wge(train$Open, phi=open.est$phi, n.ahead=1440, lastn=FALSE, limits=FALSE)
+```
+
+Count Univariate Forecasts
+```{r}
+count.best.p = aic.wge(train$Count, p=0:20, q=0:0) # AIC picks p = 18
+count.est = est.ar.wge(train$Count, count.best.p$p) # Estimate the parameters
 fore.arma.wge(train$Count, phi=count.est$phi, n.ahead=1440, lastn=FALSE, limits=FALSE)
 ```
 
-Volume Estimates
+
+Volume Univariate Forecasts
 ```{r}
-volume.best.p = aic.wge(train$Volume, p=0:15, q=0:0)
+volume.best.p = aic.wge(train$Volume, p=0:20, q=0:0) # AIC picks p = 18
 volume.est = est.ar.wge(train$Volume, volume.best.p$p)
 fore.arma.wge(train$Count, phi=volume.est$phi, n.ahead=1440, lastn=FALSE, limits=FALSE)
 ```
 
-15 min Residualized Returns Estimates
+15 min Residualized Returns Univariate Forecasts
 ```{r}
-target.best.p = aic.wge(train$Target, p=0:15, q=0:0)
+target.best.p = aic.wge(train$Target, p=0:20, q=0:0) # AIC picks p = 19
 target.est = est.ar.wge(train$Target, volume.best.p$p)
 fore.arma.wge(train$Target, phi=target.est$phi, n.ahead=1440, lastn=FALSE, limits=FALSE)
 ```
 
-Modelling
+Modelling with VARSelect as Multivariate
+
+We know from our Multiple Regression with Correlated Errors that our Target tends to be the most significant variable when predicting the Open price of BTC. So let's compare against a Vector Auto Regression.
 ```{r}
 library(vars)
 
-X = cbind(train$Count, train$Volume, train$Target)
-VARselect(X, lag.max = 45, season = NULL, exogen = NULL)
-# VARselect picks p=45 using AIC, HQ, SC, & FPE
+X = cbind(Open=train$Open, Count=train$Count, Volume=train$Volume, Target=train$Target)
+VARselect(X, lag.max = 20, season = NULL, exogen = NULL)
+# VARselect: AIC/HQ/SC/FPE=18
 ```
 
 ```{r}
-lsfit = VAR(X, p=45, type='const')
+lsfit = VAR(X, p=18, type='const')
 lsfit
 ```
-
-
+Short-Term Forecasting using VAR
 ```{r}
-pred = predict(lsfit, n.ahead=1440)
-pred
+var.preds.short = predict(lsfit, n.ahead=1440)
+var.preds.short
+```
+
+Long-Term Forecasting using VAR
+```{r}
+var.preds.long = predict(lsfit, n.ahead=10080)
+var.preds.long
+```
+
+With time trend:
+```{r}
+X.time = cbind(Open=train$Open, t=t, Count=train$Count, Volume=train$Volume, Target=train$Target)
+VARselect(X, lag.max = 20, season = NULL, exogen = NULL)
+# VARselect: AIC/HQ/SC/FPE=18
+lsfit.time = VAR(X.time, p=18, type='const')
+lsfit.time
 ```
 
 ```{r}
-# Example forecasts
-pred$fcst$y1[1:5,1]
+var.time.preds.short = predict(lsfit.time, n.ahead=1440)
+var.time.preds.short
 ```
+
 
 ```{r}
 library(RColorBrewer)
 
-fanchart(pred, colors=brewer.pal(n=8, name = "Blues"))
+fanchart(var.preds.short, colors=brewer.pal(n=8, name = "Blues"))
 ```
+
+
+Long-Term Forecasting using VAR
+```{r}
+var.time.preds.long = predict(lsfit.time, n.ahead=10080)
+var.time.preds.long
+```
+
+
+
+```{r}
+fanchart(var.preds.long, colors=brewer.pal(n=8, name = "Blues"))
+```
+# Neural Network/MLP
+```{r}
+library(nnfor)
+
+set.seed(42)
+
+tsdat = ts(data = train$Open)
+
+fit.mlp = mlp(tsdat)
+fit.mlp
+```
+```{r}
+library(nnfor)
+
+set.seed(42)
+
+#Subset training data due to issues w/ library w/ large datasets
+mlp.train2 = subset(train, timestamp > as.POSIXct("2021-05-24 23:59:00", tz="GMT"))
+
+tsdat2 = ts(data = mlp.train2$Open)
+
+fit.mlp2 = mlp(tsdat2)
+fit.mlp2
+```
+```{r}
+plot(fit.mlp2)
+```
+```{r}
+fc.short = forecast(fit.mlp2, h=1440)
+```
+
+```{r}
+fc.long = forecast(fit.mlp2, h=10080)
+```
+
+```{r}
+plot(fc.short)
+```
+
+```{r}
+end.idx = length(mlp.train2$Open)
+start.idx = end.idx - 1440+1
+
+mlp.short.ASE = mean((mlp.train2$Open[start.idx:end.idx] - fc.short$f)^2)
+mlp.short.ASE
+# ASE = 4,703,662
+sqrt(mlp.short.ASE)
+# Root ASE = 2,168.793
+```
+
+```{r}
+plot(fc.long)
+```
+
+```{r}
+end.idx = length(fc.short$f)
+start.idx = end.idx - 10800+1
+
+mlp.short.ASE = mean((mlp.train2$Open[start.idx:end.idx] - fc.short$f)^2)
+mlp.short.ASE
+# ASE = 4,703,662
+sqrt(mlp.short.ASE)
+# Root ASE = 2,168.793
+```
+TODO: Double check this score
+
+# Ensembling Methods
+
+We'll expand our number of networks to train in the nnfor::mlp by using the reps parameter. This results in an ensemble forecast.
+
+```{r}
+xregs = data.frame(Count = ts(mlp.train2$Count), Volume = ts(mlp.train2$Volume), Target = ts(mlp.train2$Target))
+fit.mlp.ensemble = mlp(tsdat2, xreg = xregs)
+fit.mlp.ensemble
+```
+
+```{r}
+plot(fit.mlp.ensemble)
+```
+
+```{r}
+fc.short = forecast(fit.mlp2, h=1440)
+```
+
+```{r}
+fc.long = forecast(fit.mlp2, h=10080)
+```
+
+```{r}
+plot(fc.short)
+```
+
+
+
+
 
