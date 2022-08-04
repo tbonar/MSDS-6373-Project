@@ -1,7 +1,7 @@
 ---
 title: "Multivariate Analysis"
 author: "Taylor Bonar & Satvik Ajmera"
-output: pdf_document
+output: html_document
 ---
 
 ```{r}
@@ -180,12 +180,11 @@ Is Target a useful variable? **No**
 1028.5847 < 1,386.925
 
 ```{r}
-plot(fit2$residuals)
-acf(fit2$residuals)
-ltest2 = ljung.wge(fit2$residuals)
+plot(fit_train$residuals)
+acf(fit_train$residuals)
+ltest2 = ljung.wge(fit_train$residuals)
 ltest2$pval
 ```
-
 
 # Lagged Variables
 
@@ -283,6 +282,21 @@ var.preds.long = predict(lsfit, n.ahead=10080)
 var.preds.long
 ```
 
+
+```{r}
+# ggplot(data = test.short, aes(unix_time, y=Open)) + geom_line()
+# ggplot(data = var.preds.short, aes(var.preds.short$fcst$Open)) + geom_line(aes(colour="red"))
+plot(seq(1,1439,1), test.short$Open, type = "l")
+points(seq(1,1439,1), var.preds.short$fcst$Open[1:1439], pch = 5, col="red")
+```
+
+```{r}
+# ggplot(data = test.short, aes(unix_time, y=Open)) + geom_line()
+# ggplot(data = var.preds.short, aes(var.preds.short$fcst$Open)) + geom_line(aes(colour="red"))
+plot(seq(1,10079,1), test.long$Open, type = "l")
+points(seq(1,10079,1), var.preds.long$fcst$Open[1:10079], pch = 5, col="red")
+```
+
 With time trend:
 ```{r}
 X.time = cbind(Open=train$Open, t=t, Count=train$Count, Volume=train$Volume, Target=train$Target)
@@ -322,16 +336,6 @@ library(nnfor)
 
 set.seed(42)
 
-tsdat = ts(data = train$Open)
-
-fit.mlp = mlp(tsdat)
-fit.mlp
-```
-```{r}
-library(nnfor)
-
-set.seed(42)
-
 #Subset training data due to issues w/ library w/ large datasets
 mlp.train2 = subset(train, timestamp > as.POSIXct("2021-05-24 23:59:00", tz="GMT"))
 
@@ -340,15 +344,14 @@ tsdat2 = ts(data = mlp.train2$Open)
 fit.mlp2 = mlp(tsdat2)
 fit.mlp2
 ```
+
 ```{r}
 plot(fit.mlp2)
 ```
-```{r}
-fc.short = forecast(fit.mlp2, h=1440)
-```
 
 ```{r}
-fc.long = forecast(fit.mlp2, h=10080)
+fc.short.period = 1439
+fc.short = forecast(fit.mlp2, h=fc.short.period)
 ```
 
 ```{r}
@@ -356,14 +359,16 @@ plot(fc.short)
 ```
 
 ```{r}
-end.idx = length(mlp.train2$Open)
-start.idx = end.idx - 1440+1
-
-mlp.short.ASE = mean((mlp.train2$Open[start.idx:end.idx] - fc.short$f)^2)
+mlp.short.ASE = mean((test.short$Open - fc.short$f)^2)
 mlp.short.ASE
-# ASE = 4,703,662
+# ASE = 3317252
 sqrt(mlp.short.ASE)
-# Root ASE = 2,168.793
+# Root ASE = 1821.332
+```
+
+```{r}
+fc.long.period = 10080
+fc.long = forecast(fit.mlp2, h=fc.long.period)
 ```
 
 ```{r}
@@ -371,44 +376,10 @@ plot(fc.long)
 ```
 
 ```{r}
-end.idx = length(fc.short$f)
-start.idx = end.idx - 10800+1
-
-mlp.short.ASE = mean((mlp.train2$Open[start.idx:end.idx] - fc.short$f)^2)
-mlp.short.ASE
-# ASE = 4,703,662
-sqrt(mlp.short.ASE)
-# Root ASE = 2,168.793
+mlp.long.ASE = mean((test.long$Open[1:10077] - fc.long$f)^2)
+mlp.long.ASE
+# ASE = 1942979
+sqrt(mlp.long.ASE)
+# Root ASE = 1393.908
 ```
-TODO: Double check this score
-
-# Ensembling Methods
-
-We'll expand our number of networks to train in the nnfor::mlp by using the reps parameter. This results in an ensemble forecast.
-
-```{r}
-xregs = data.frame(Count = ts(mlp.train2$Count), Volume = ts(mlp.train2$Volume), Target = ts(mlp.train2$Target))
-fit.mlp.ensemble = mlp(tsdat2, xreg = xregs)
-fit.mlp.ensemble
-```
-
-```{r}
-plot(fit.mlp.ensemble)
-```
-
-```{r}
-fc.short = forecast(fit.mlp2, h=1440)
-```
-
-```{r}
-fc.long = forecast(fit.mlp2, h=10080)
-```
-
-```{r}
-plot(fc.short)
-```
-
-
-
-
 
